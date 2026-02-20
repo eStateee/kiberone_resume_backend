@@ -31,7 +31,7 @@ class GroupAdmin(admin.ModelAdmin):
 
 
 class StudentAdmin(admin.ModelAdmin):
-    list_display = ("id", "student_crm_id", "student_name", "group")
+    list_display = ("id", "student_crm_id", "student_name", "group", "study_start_date")
     list_filter = ("group",)
     search_fields = ("student_name", "student_crm_id")
     ordering = ("student_name",)

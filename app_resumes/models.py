@@ -125,6 +125,7 @@ class Student(models.Model):
     student_crm_id = models.IntegerField(unique=True)  # Corresponds to "customer_id" in the JSON
     student_name = models.CharField(max_length=255)  # Corresponds to "client_name" in the JSON
     group = models.ForeignKey("Group", related_name="students", null=True, on_delete=models.CASCADE)
+    study_start_date = models.CharField(max_length=20, null=True, blank=True)  # Corresponds to "custom_datano" in CRM (format: "DD.MM.YYYY")
 
     def save(self, *args, **kwargs):
         # Process any array values to single values before saving
@@ -132,3 +133,8 @@ class Student(models.Model):
 
     def __str__(self):
         return self.student_name or f"Student {self.id}"
+
+    class Meta:
+        verbose_name = "Student"
+        verbose_name_plural = "Students"
+        ordering = ["student_name"]
