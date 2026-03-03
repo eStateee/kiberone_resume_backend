@@ -286,20 +286,25 @@ def get_group_clients_from_crm(group_id: str, branch: str = None) -> Optional[Di
         result = response.json()
 
         customer_ids = [customer_id["customer_id"] for customer_id in result.get("items", [])]
-        client_names = []
 
         # For each customer_id, get client data
+        clients_data = []
         for customer_id in customer_ids:
             # Note: This is recursive and might need to be optimized
             client_data = get_client_data_from_crm(str(customer_id), branch)
             if client_data:
                 client_name = client_data.get("name", "Неизвестный клиент")
-                client_names.append(client_name)
+                study_start_date = client_data.get("custom_datano")  # Дата начала обучения из CRM
             else:
-                client_names.append("Клиент не найден")
+                client_name = "Клиент не найден"
+                study_start_date = None
+            clients_data.append((customer_id, client_name, study_start_date))
 
         # Create the response format
-        clients_in_group = [{"customer_id": customer_id, "client_name": client_name} for customer_id, client_name in zip(customer_ids, client_names)]
+        clients_in_group = [
+            {"customer_id": customer_id, "client_name": client_name, "custom_datano": study_start_date}
+            for customer_id, client_name, study_start_date in clients_data
+        ]
         logger.info(f"Получено {len(clients_in_group)} клиентов для группы {group_id}")
         return clients_in_group
     except requests.HTTPError as e:

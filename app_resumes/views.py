@@ -401,7 +401,11 @@ def get_group_clients(request):
         # Format the response to match the expected structure
         clients_data = []
         for student in students:
-            client_data = {"customer_id": student.student_crm_id, "client_name": student.student_name}
+            client_data = {
+                "customer_id": student.student_crm_id,
+                "client_name": student.student_name,
+                "study_start_date": student.study_start_date,
+            }
             clients_data.append(client_data)
 
         return Response(clients_data if clients_data else {"clients": []})

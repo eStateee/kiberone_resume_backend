@@ -34,13 +34,36 @@ class Command(BaseCommand):
                         client_name = client.get("client_name")
 
                         if customer_id and client_name:
+                            study_start_date = client.get("custom_datano")
+                            
                             # Create or update student record with group relationship
-                            student, created = Student.objects.get_or_create(student_crm_id=customer_id, defaults={"student_name": client_name, "group_id": group.id})
+                            student, created = Student.objects.get_or_create(
+                                student_crm_id=customer_id, 
+                                defaults={
+                                    "student_name": client_name, 
+                                    "group_id": group.id,
+                                    "study_start_date": study_start_date
+                                }
+                            )
 
-                            # If student already exists, update the group relationship
-                            if not created and student.group_id != group.id:
-                                student.group_id = group.id
-                                student.save()
+                            # If student already exists, check if any fields need updating
+                            if not created:
+                                needs_update = False
+                                
+                                if student.group_id != group.id:
+                                    student.group_id = group.id
+                                    needs_update = True
+                                    
+                                if student.student_name != client_name:
+                                    student.student_name = client_name
+                                    needs_update = True
+                                    
+                                if student.study_start_date != study_start_date:
+                                    student.study_start_date = study_start_date
+                                    needs_update = True
+                                    
+                                if needs_update:
+                                    student.save()
 
                             total_synced += 1
 
