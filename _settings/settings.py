@@ -178,6 +178,7 @@ CELERY_RESULT_BACKEND = "django-db"
 CRM_API_URL = os.getenv("CRM_API_URL", "")
 CRM_EMAIL = os.getenv("CRM_EMAIL", "")
 CRM_API_KEY = os.getenv("CRM_API_KEY", "")
+CRM_BRANCH_IDS = [int(b.strip()) for b in os.getenv("CRM_BRANCH_IDS", "1,2,3,4").split(",")]
 
 
 LOGS_DIR = BASE_DIR / "logs"
