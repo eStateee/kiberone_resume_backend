@@ -2,6 +2,10 @@ from django.core.management.base import BaseCommand
 from app_resumes.models import Group, TutorProfile
 from app_resumes.crm_integration import get_all_groups
 
+import logging
+
+logger = logging.getLogger("app_resume")
+
 
 class Command(BaseCommand):
     help = "Synchronize all groups from CRM to the database"
@@ -15,6 +19,7 @@ class Command(BaseCommand):
                 return
 
             synced_count = 0
+            skipped_count = 0
             for group_data in groups_data:
                 # Extract fields from CRM data
                 crm_group_id = group_data.get("id")
@@ -32,6 +37,28 @@ class Command(BaseCommand):
                 created_at = group_data.get("created_at")
                 updated_at = group_data.get("updated_at")
                 custom_aerodromnaya = group_data.get("custom_aerodromnaya")
+
+                # Проверка обязательных NOT NULL полей
+                missing_fields = []
+                if level_id is None:
+                    missing_fields.append(f"level_id=None")
+                if status_id is None:
+                    missing_fields.append(f"status_id=None")
+                if limit is None:
+                    missing_fields.append(f"limit=None")
+
+                if missing_fields:
+                    self.stdout.write(self.style.WARNING(
+                        f"ПРОПУСК группы crm_id={crm_group_id}, "
+                        f"name=\"{name}\": отсутствуют обязательные поля: "
+                        f"{', '.join(missing_fields)}"
+                    ))
+                    logger.warning(
+                        f"sync_groups: пропуск группы crm_id={crm_group_id}, "
+                        f"name=\"{name}\": {', '.join(missing_fields)}"
+                    )
+                    skipped_count += 1
+                    continue
 
                 # Try to get existing group or create new one
                 group, created = Group.objects.get_or_create(
@@ -74,7 +101,11 @@ class Command(BaseCommand):
 
                 synced_count += 1
 
-            self.stdout.write(self.style.SUCCESS(f"Successfully synchronized {synced_count} groups"))
+            result_msg = f"Successfully synchronized {synced_count} groups"
+            if skipped_count:
+                result_msg += f", skipped {skipped_count} groups with missing required fields"
+            self.stdout.write(self.style.SUCCESS(result_msg))
 
         except Exception as e:
             self.stdout.write(self.style.ERROR(f"An error occurred while synchronizing groups: {str(e)}"))
+
