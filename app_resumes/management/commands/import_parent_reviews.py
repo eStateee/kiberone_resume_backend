@@ -2,7 +2,7 @@ import os
 import openpyxl
 from django.core.management.base import BaseCommand, CommandError
 from django.conf import settings
-from app_resumes.models import ParentReview
+from app_resumes.models import ParentReview, Student
 
 
 class Command(BaseCommand):
@@ -131,8 +131,15 @@ class Command(BaseCommand):
                     self.stdout.write(f"    [DRY RUN] Сохранил бы отзыв: ID={student_crm_id}, " f"Имя={student_name}, Тип={review_type}, " f"Длина={len(review_content)} символов")
                 else:
                     # Сохраняем отзыв в БД
-                    # Преобразуем student_crm_id в строку, чтобы соответствовать CharField в модели
-                    review, created = ParentReview.objects.get_or_create(student_crm_id=str(student_crm_id), defaults={"content": review_content})
+                    try:
+                        student = Student.objects.get(student_crm_id=int(student_crm_id))
+                    except (ValueError, TypeError, Student.DoesNotExist):
+                        self.stdout.write(self.style.WARNING(
+                            f"    [ПРОПУСК] Студент с CRM ID {student_crm_id} ({student_name}) не найден в локальной БД. Пропуск импорта."
+                        ))
+                        continue
+
+                    review, created = ParentReview.objects.get_or_create(student=student, defaults={"content": review_content})
 
                     if not created:
                         # Обновляем существующий отзыв
@@ -143,7 +150,7 @@ class Command(BaseCommand):
                         action = "создан"
 
                     saved_count += 1
-                    self.stdout.write(f"    Отзыв {action}: ID={student_crm_id}, " f"Имя={student_name}")
+                    self.stdout.write(f"    Отзыв {action}: ID={student_crm_id}, Имя={student_name}")
 
         self.stdout.write(f"    Обработано строк: {processed_count}, " f"Сохранено отзывов: {saved_count}")
 

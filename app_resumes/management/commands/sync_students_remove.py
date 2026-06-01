@@ -15,9 +15,15 @@ class Command(BaseCommand):
             action='store_true',
             help='Запустить команду без фактического удаления данных',
         )
+        parser.add_argument(
+            '--force',
+            action='store_true',
+            help='Принудительно продолжить удаление, даже если превышен лимит 30%',
+        )
 
     def handle(self, *args, **options):
         dry_run = options['dry_run']
+        force = options['force']
         
         try:
             self.stdout.write("Проверка всех студентов в существующих группах из CRM...")
@@ -70,6 +76,19 @@ class Command(BaseCommand):
             if count_to_delete == 0:
                 self.stdout.write(self.style.SUCCESS("Локальная база актуальна. Нет студентов для удаления."))
                 return
+
+            # Проверка предохранителя на 30%
+            total_students_count = Student.objects.count()
+            if total_students_count > 0:
+                deletion_ratio = count_to_delete / total_students_count
+                if deletion_ratio > 0.3 and not force:
+                    self.stdout.write(self.style.ERROR(
+                        f"ОШИБКА БЕЗОПАСНОСТИ: Попытка удалить {count_to_delete} из {total_students_count} студентов ({deletion_ratio:.1%}), "
+                        "что превышает порог в 30%!\n"
+                        "Операция остановлена во избежание массовой потери данных. Для принудительного запуска используйте флаг --force."
+                    ))
+                    logger.error(f"sync_students_remove: Прервано удаление {count_to_delete}/{total_students_count} ({deletion_ratio:.1%}) без флага --force.")
+                    return
 
             if dry_run:
                 self.stdout.write(self.style.WARNING(

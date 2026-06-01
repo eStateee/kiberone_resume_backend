@@ -464,7 +464,7 @@ class ResumeListView(generics.ListAPIView):
             return Resume.objects.none()
 
         student_crm_id = self.request.query_params.get("student_crm_id", "")
-        return Resume.objects.filter(student_crm_id=student_crm_id)
+        return Resume.objects.filter(student__student_crm_id=student_crm_id).select_related("student")
 
 
 class ResumeDetailView(APIView):
@@ -527,7 +527,7 @@ class ResumeDetailView(APIView):
             resume_serializer = ResumeSerializer(resume)
             return Response(resume_serializer.data)
         else:
-            return Response(serializer.errors, status=status.HTTP_40_BAD_REQUEST)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class VerifyResumeView(APIView):
@@ -640,8 +640,13 @@ def create_resume(request):
 
     serializer = ResumeCreateSerializer(data=request.data)
     if serializer.is_valid():
+        try:
+            student = Student.objects.get(student_crm_id=int(serializer.validated_data["student_crm_id"]))
+        except (ValueError, TypeError, Student.DoesNotExist):
+            return Response({"detail": "Student not found in the local database"}, status=status.HTTP_404_NOT_FOUND)
+
         resume = Resume.objects.create(
-            student_crm_id=serializer.validated_data["student_crm_id"],
+            student=student,
             content=serializer.validated_data["content"],
         )
         resume_serializer = ResumeSerializer(resume)
@@ -725,7 +730,7 @@ def get_latest_verified_resume(request):
         return Response({"detail": "student_crm_id parameter is required"}, status=status.HTTP_400_BAD_REQUEST)
 
     # Get the latest verified resume for the student
-    latest_resume = Resume.objects.filter(student_crm_id=student_crm_id, is_verified=True).order_by("-created_at").first()
+    latest_resume = Resume.objects.filter(student__student_crm_id=student_crm_id, is_verified=True).select_related("student").order_by("-created_at").first()
 
     if not latest_resume:
         return Response({"detail": "No verified resume found for this student"}, status=status.HTTP_404_NOT_FOUND)
@@ -769,14 +774,11 @@ def create_parent_review(request):
     """
     serializer = ParentReviewSerializer(data=request.data)
     if serializer.is_valid():
-        review = ParentReview.objects.create(
-            student_crm_id=serializer.validated_data["student_crm_id"],
-            content=serializer.validated_data["content"],
-        )
+        review = serializer.save()
         review_serializer = ParentReviewSerializer(review)
         return Response(review_serializer.data, status=status.HTTP_201_CREATED)
     else:
-        return Response(serializer.errors, status=status.HTTP_40_BAD_REQUEST)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class ParentReviewsView(generics.ListAPIView):
@@ -790,7 +792,7 @@ class ParentReviewsView(generics.ListAPIView):
             return ParentReview.objects.none()
 
         student_crm_id = self.kwargs.get("student_crm_id", "")
-        return ParentReview.objects.filter(student_crm_id=student_crm_id)
+        return ParentReview.objects.filter(student__student_crm_id=student_crm_id).select_related("student")
 
 
 # Tutor detail endpoint

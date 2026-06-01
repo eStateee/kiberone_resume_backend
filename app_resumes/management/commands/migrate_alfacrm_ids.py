@@ -6,7 +6,9 @@ Django management command для миграции crm_id при переходе
   2. Сопоставление TutorProfile по phone_number → обновление tutor_crm_id, branch, branch_ids.
   3. Сопоставление Group по name → обновление crm_group_id, branch_ids, teacher_ids и доп. полей.
   4. Сопоставление Student по student_name внутри группы → обновление student_crm_id.
-  5. Каскадное обновление student_crm_id в Resume и ParentReview.
+
+Resume и ParentReview связаны с Student через ForeignKey (по PK), поэтому
+каскадное обновление student_crm_id в этих таблицах не требуется.
 
 Все изменения в БД выполняются в единой транзакции (transaction.atomic).
 Поддерживается флаг --dry-run для проверки без записи.
@@ -136,16 +138,8 @@ class Command(BaseCommand):
             self._collect_all_mappings(token, branches)
         )
 
-        # --- Оценка каскадных обновлений Resume / ParentReview ---
-        student_id_map = {u["old_crm_id"]: u["new_crm_id"] for u in student_updates}
-        estimated_resumes = 0
-        estimated_reviews = 0
-        for old_id in student_id_map:
-            estimated_resumes += Resume.objects.filter(student_crm_id=str(old_id)).count()
-            estimated_reviews += ParentReview.objects.filter(student_crm_id=str(old_id)).count()
-
-        stats["resumes_updated"] = estimated_resumes
-        stats["reviews_updated"] = estimated_reviews
+        # Resume и ParentReview связаны через ForeignKey к Student (по PK),
+        # поэтому каскадное обновление не требуется.
 
         # --- Отчёт ---
         self._print_report(stats, warnings, dry_run)
@@ -178,7 +172,6 @@ class Command(BaseCommand):
             "tutors_matched": 0, "tutors_not_found": 0,
             "groups_matched": 0, "groups_not_found": 0,
             "students_matched": 0, "students_not_found": 0,
-            "resumes_updated": 0, "reviews_updated": 0,
         }
         warnings = []
 
@@ -517,9 +510,9 @@ class Command(BaseCommand):
                 active_pks = {u["pk"] for u in student_updates}
                 target_crm_ids = {int(u["new_crm_id"]) for u in student_updates}
 
-                # Вытеснение: найти студентов-блокираторов и каскадно
-                # обновить их связанные Resume / ParentReview (CharField-связь),
-                # чтобы новый студент не унаследовал чужие данные.
+                # Вытеснение: найти студентов-блокираторов.
+                # Resume и ParentReview связаны через FK к Student.pk,
+                # поэтому каскадное обновление не требуется.
                 blockers = Student.objects.filter(
                     student_crm_id__in=target_crm_ids
                 ).exclude(pk__in=active_pks)
@@ -529,31 +522,15 @@ class Command(BaseCommand):
                     old_id = str(blocker.student_crm_id)
                     new_archived_id = -blocker.pk
 
-                    # Каскадное обновление связанных данных ПЕРЕД вытеснением
-                    resumes_moved = Resume.objects.filter(
-                        student_crm_id=old_id
-                    ).update(student_crm_id=str(new_archived_id))
-
-                    reviews_moved = ParentReview.objects.filter(
-                        student_crm_id=old_id
-                    ).update(student_crm_id=str(new_archived_id))
-
                     # Вытеснение самого студента
                     Student.objects.filter(pk=blocker.pk).update(
                         student_crm_id=new_archived_id
                     )
 
-                    cascade_info = ""
-                    if resumes_moved or reviews_moved:
-                        cascade_info = (
-                            f" (каскад: {resumes_moved} резюме, "
-                            f"{reviews_moved} отзывов)"
-                        )
-
                     self.log_output(
                         f"  ↻ Вытеснен студент \"{blocker.student_name}\" "
                         f"(pk={blocker.pk}): student_crm_id "
-                        f"{old_id} → {new_archived_id}{cascade_info}"
+                        f"{old_id} → {new_archived_id}"
                     )
                     evicted_count += 1
 
@@ -570,46 +547,10 @@ class Command(BaseCommand):
                     )
                 self.log_output(f"  ✓ Обновлено студентов: {len(student_updates)}")
 
-            # ──── Каскадное обновление Resume / ParentReview ────
-            # Двухфазное обновление для предотвращения коллизий
-            # пересекающихся ID (когда new_id одного студента совпадает
-            # с old_id другого).
-            #
-            # Фаза А: old_id → _temp_{old_id}  (изоляция)
-            # Фаза Б: _temp_{old_id} → new_id  (финализация)
-            filtered_id_map = {u["old_crm_id"]: u["new_crm_id"] for u in student_updates}
-
-            # --- Resume ---
-            # Фаза А: изоляция через временный префикс
-            for old_id in filtered_id_map:
-                Resume.objects.filter(student_crm_id=str(old_id)).update(
-                    student_crm_id=f"_temp_{old_id}"
-                )
-            # Фаза Б: финализация — временные ID → целевые
-            total_resumes = 0
-            for old_id, new_id in filtered_id_map.items():
-                updated = Resume.objects.filter(student_crm_id=f"_temp_{old_id}").update(
-                    student_crm_id=str(new_id)
-                )
-                total_resumes += updated
-            if total_resumes:
-                self.log_output(f"  ✓ Обновлено резюме: {total_resumes}")
-
-            # --- ParentReview ---
-            # Фаза А: изоляция через временный префикс
-            for old_id in filtered_id_map:
-                ParentReview.objects.filter(student_crm_id=str(old_id)).update(
-                    student_crm_id=f"_temp_{old_id}"
-                )
-            # Фаза Б: финализация — временные ID → целевые
-            total_reviews = 0
-            for old_id, new_id in filtered_id_map.items():
-                updated = ParentReview.objects.filter(student_crm_id=f"_temp_{old_id}").update(
-                    student_crm_id=str(new_id)
-                )
-                total_reviews += updated
-            if total_reviews:
-                self.log_output(f"  ✓ Обновлено отзывов: {total_reviews}")
+            # Resume и ParentReview связаны через ForeignKey к Student.pk,
+            # поэтому каскадное обновление student_crm_id не требуется.
+            # При смене student_crm_id у Student все связанные записи
+            # автоматически остаются привязаны к правильному студенту.
 
     # ——————————————— Итоговый отчёт ———————————————
 
@@ -633,8 +574,8 @@ class Command(BaseCommand):
             f"  Студенты  │ найдено: {stats['students_matched']:>3}  "
             f"│ не найдено: {stats['students_not_found']:>3}"
         )
-        self.log_output(f"  Резюме    │ будет обновлено: {stats['resumes_updated']:>3}")
-        self.log_output(f"  Отзывы    │ будет обновлено: {stats['reviews_updated']:>3}")
+        self.log_output(f"  Резюме    │ связаны через FK — обновление не требуется")
+        self.log_output(f"  Отзывы    │ связаны через FK — обновление не требуется")
 
         if warnings:
             self.log_output(self.style.WARNING(f"\n  ⚠ Предупреждения ({len(warnings)}):"))

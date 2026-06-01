@@ -46,7 +46,7 @@ class TutorProfile(models.Model):
 
 class Resume(models.Model):
     id = models.AutoField(primary_key=True)
-    student_crm_id = models.CharField(max_length=255)
+    student = models.ForeignKey("Student", on_delete=models.CASCADE, related_name="resumes")
     content = models.TextField(null=True)
     is_verified = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -57,7 +57,7 @@ class Resume(models.Model):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"Resume for student {self.student_crm_id}"
+        return f"Resume for student {self.student.student_crm_id}"
 
     class Meta:
         verbose_name = "Resume"
@@ -67,7 +67,7 @@ class Resume(models.Model):
 
 class ParentReview(models.Model):
     id = models.AutoField(primary_key=True)
-    student_crm_id = models.CharField(max_length=255)
+    student = models.ForeignKey("Student", on_delete=models.CASCADE, related_name="parent_reviews")
     content = models.TextField(null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -77,7 +77,7 @@ class ParentReview(models.Model):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"Review for student {self.student_crm_id}"
+        return f"Review for student {self.student.student_crm_id}"
 
     class Meta:
         verbose_name = "Parent Review"

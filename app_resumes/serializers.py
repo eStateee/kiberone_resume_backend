@@ -9,15 +9,27 @@ class TutorProfileSerializer(serializers.ModelSerializer):
 
 
 class ResumeSerializer(serializers.ModelSerializer):
+    student_crm_id = serializers.SlugRelatedField(
+        slug_field="student_crm_id",
+        queryset=Student.objects.all(),
+        source="student"
+    )
+
     class Meta:
         model = Resume
-        fields = "__all__"
+        fields = ("id", "student_crm_id", "content", "is_verified", "created_at", "updated_at")
 
 
 class ParentReviewSerializer(serializers.ModelSerializer):
+    student_crm_id = serializers.SlugRelatedField(
+        slug_field="student_crm_id",
+        queryset=Student.objects.all(),
+        source="student"
+    )
+
     class Meta:
         model = ParentReview
-        fields = "__all__"
+        fields = ("id", "student_crm_id", "content", "created_at", "updated_at")
 
 
 class GroupSerializer(serializers.ModelSerializer):

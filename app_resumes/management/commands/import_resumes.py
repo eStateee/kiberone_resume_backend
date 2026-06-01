@@ -2,7 +2,7 @@ import os
 import openpyxl
 from django.core.management.base import BaseCommand, CommandError
 from django.conf import settings
-from app_resumes.models import Resume
+from app_resumes.models import Resume, Student
 
 
 class Command(BaseCommand):
@@ -131,8 +131,15 @@ class Command(BaseCommand):
                     self.stdout.write(f"    [DRY RUN] Сохранил бы резюме: ID={student_crm_id}, " f"Имя={student_name}, Длина={len(resume_content)} символов")
                 else:
                     # Сохраняем резюме в БД
-                    # Преобразуем student_crm_id в строку, чтобы соответствовать CharField в модели
-                    resume, created = Resume.objects.get_or_create(student_crm_id=str(student_crm_id), content=resume_content, defaults={"is_verified": False})
+                    try:
+                        student = Student.objects.get(student_crm_id=int(student_crm_id))
+                    except (ValueError, TypeError, Student.DoesNotExist):
+                        self.stdout.write(self.style.WARNING(
+                            f"    [ПРОПУСК] Студент с CRM ID {student_crm_id} ({student_name}) не найден в локальной БД. Пропуск импорта."
+                        ))
+                        continue
+
+                    resume, created = Resume.objects.get_or_create(student=student, content=resume_content, defaults={"is_verified": False})
 
                     if not created:
                         # Обновляем существующее резюме
@@ -143,7 +150,7 @@ class Command(BaseCommand):
                         action = "создано"
 
                     saved_count += 1
-                    self.stdout.write(f"    Резюме {action}: ID={student_crm_id}, " f"Имя={student_name}")
+                    self.stdout.write(f"    Резюме {action}: ID={student_crm_id}, Имя={student_name}")
 
         self.stdout.write(f"    Обработано строк: {processed_count}, " f"Сохранено резюме: {saved_count}")
 
